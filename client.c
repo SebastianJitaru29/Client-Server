@@ -692,7 +692,7 @@ void get_file(){
     }
 
 
-    FILE_pack();
+    FILE_pack(); 
     send_TCP_pack.tipus = GET_FILE;
     strcpy(send_TCP_pack.id_equip, device.id);
     strcpy(send_TCP_pack.mac, device.mac);
@@ -701,20 +701,26 @@ void get_file(){
     snprintf(result, sizeof(result), "%s", filename);
     strcpy(send_TCP_pack.Dades,result);
     send_TCP_package(send_TCP_pack,sock);
-    for(int i = 0; i < 4 ; i++){
-    recv_TCP_package(w,sock);
-    /*
-        if(recieved_comm_pack.tipus == GET_ACK){
-            printf("%02d:%02d:%02d  => Primer paquet GET_DATA :%s, Dades:%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recieved_comm_pack.tipus), recieved_comm_pack.Dades);
-        }else if(recieved_comm_pack.tipus == GET_NACK){
-            printf("%02d:%02d:%02d  => Peticio denegada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recieved_comm_pack.tipus));
 
-        }else if(recieved_comm_pack.tipus == GET_REJ){
-            printf("%02d:%02d:%02d  => Peticio rebutjada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recieved_comm_pack.tipus));
+    struct  TCP_Package *recvd_pack = malloc(sizeof(struct TCP_Package));
+
+    
+    for(int i = 0; i < 4 ; i++){
+        recv(sock, recvd_pack, sizeof(recvd_pack), 0);
+        if(recvd_pack->tipus == GET_ACK){
+            printf("%02d:%02d:%02d  => Primer paquet GET_DATA :%s, Dades:%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recvd_pack->tipus), recvd_pack->Dades);
+        }else if(recvd_pack->tipus == GET_NACK){
+            printf("%02d:%02d:%02d  => Peticio denegada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recvd_pack->tipus));
+
+        }else if(recvd_pack->tipus == GET_REJ){
+            printf("%02d:%02d:%02d  => Peticio rebutjada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recvd_pack->tipus));
             close(sock);
             close_sockets_and_exit();
+        }else{
+           printf("Rebut paquet tipus: %s amb elements -> id equip:%s, mac:%s, num_ale:%s, Dades:%s\n", get_type(recvd_pack->tipus),recvd_pack->id_equip, recvd_pack->mac, recvd_pack->num_ale, recvd_pack->Dades);
+         
         }
-        */
+        
     }
 }
 

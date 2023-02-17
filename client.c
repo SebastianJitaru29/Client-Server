@@ -694,15 +694,27 @@ void get_file(){
 
     FILE_pack();
     send_TCP_pack.tipus = GET_FILE;
+    strcpy(send_TCP_pack.id_equip, device.id);
+    strcpy(send_TCP_pack.mac, device.mac);
+    strcpy(send_TCP_pack.num_ale,server_pack.num_ale);
+    char result[1024];
+    snprintf(result, sizeof(result), "%s", filename);
+    strcpy(send_TCP_pack.Dades,result);
     send_TCP_package(send_TCP_pack,sock);
-    recv_TCP_package(w,sock); //AMB AQUEST SOCKET NO REBO RES;
+    for(int i = 0; i < 4 ; i++){
+    recv_TCP_package(w,sock);
+    /*
+        if(recieved_comm_pack.tipus == GET_ACK){
+            printf("%02d:%02d:%02d  => Primer paquet GET_DATA :%s, Dades:%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recieved_comm_pack.tipus), recieved_comm_pack.Dades);
+        }else if(recieved_comm_pack.tipus == GET_NACK){
+            printf("%02d:%02d:%02d  => Peticio denegada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recieved_comm_pack.tipus));
 
-    if(recieved_comm_pack.tipus == GET_ACK){
-
-    }else if(recieved_comm_pack.tipus == GET_NACK){
-
-    }else if(recieved_comm_pack.tipus == GET_REJ){
-        
+        }else if(recieved_comm_pack.tipus == GET_REJ){
+            printf("%02d:%02d:%02d  => Peticio rebutjada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recieved_comm_pack.tipus));
+            close(sock);
+            close_sockets_and_exit();
+        }
+        */
     }
 }
 

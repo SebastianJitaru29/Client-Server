@@ -124,6 +124,7 @@ void send_TCP_package(struct TCP_Package pack, int socket);
 void send_file();
 void get_file();
 void FILE_pack();
+struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock);
 //FUNCIONS ADICIONALS
 char * get_type(int type);
 void get_time();
@@ -702,29 +703,52 @@ void get_file(){
     strcpy(send_TCP_pack.Dades,result);
     send_TCP_package(send_TCP_pack,sock);
 
-    struct  TCP_Package *recvd_pack = malloc(sizeof(struct TCP_Package));
+    FILE *network_dev_config_file = fopen(filename, "w");
 
-    
-    for(int i = 0; i < 4 ; i++){
-        recv(sock, recvd_pack, sizeof(recvd_pack), 0);
-        if(recvd_pack->tipus == GET_ACK){
-            printf("%02d:%02d:%02d  => Primer paquet GET_DATA :%s, Dades:%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recvd_pack->tipus), recvd_pack->Dades);
-        }else if(recvd_pack->tipus == GET_NACK){
-            printf("%02d:%02d:%02d  => Peticio denegada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recvd_pack->tipus));
-
-        }else if(recvd_pack->tipus == GET_REJ){
-            printf("%02d:%02d:%02d  => Peticio rebutjada.Rebut paquet tipus %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(recvd_pack->tipus));
-            close(sock);
-            close_sockets_and_exit();
-        }else{
-           printf("Rebut paquet tipus: %s amb elements -> id equip:%s, mac:%s, num_ale:%s, Dades:%s\n", get_type(recvd_pack->tipus),recvd_pack->id_equip, recvd_pack->mac, recvd_pack->num_ale, recvd_pack->Dades);
-         
-        }
-        
+    struct TCP_Package received_package = receive_package_via_tcp_from_server(w,sock);
+   
+    while (received_package.tipus != GET_END) {
+        /* receive GET_DATA packages from server, ensure they're valid and fill conf file up */
+        received_package = receive_package_via_tcp_from_server(w,sock);
+        fputs(received_package.Dades, network_dev_config_file);
     }
+    close(sock);
+    fclose(network_dev_config_file);
+    printf("INFO -> Successfully ended reception of configuration file from server\n");
 }
 
+struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock) {
+    
+    fd_set rfds;
+    char *buf = malloc(sizeof(struct TCP_Package));
+    struct TCP_Package *received_package = malloc(sizeof(struct TCP_Package));
+    struct timeval tcp_timeout;
+    FD_ZERO(&rfds); /* clears set */
+    FD_SET(sock, &rfds); /* add socket to descriptor set */
+    tcp_timeout.tv_sec = max_timeout;
+    /* if any data in socket */
+    if (select(sock + 1, &rfds, NULL, NULL, &tcp_timeout) > 0) {
+        read(sock, buf, sizeof(struct TCP_Package));
+        received_package = (struct TCP_Package *) buf;
+        if (DEBUG_MODE == 0) {
+            char message[280];
+            sprintf(message,
+                    "DEBUG -> \t\t Received %s;\n"
+                    "\t\t\t\t\t  Bytes:%lu,\n"
+                    "\t\t\t\t\t  name:%s,\n " 
+                    "\t\t\t\t\t  mac:%s,\n"
+                    "\t\t\t\t\t  rand num:%s,\n"
+                    "\t\t\t\t\t  data:%s\n\n",
+                    get_type(received_package->tipus),
+                    sizeof(*received_package), (*received_package).id_equip,
+                    (*received_package).mac, (*received_package).num_ale,
+                    (*received_package).Dades);
+             printf("%02d:%02d:%02d  => %s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, message);
+        }
+    }
 
+    return *received_package;
+}
 void *send_alive(){
     addr_server.sin_port = htons(device.nmsUdpPort);
     while(true){

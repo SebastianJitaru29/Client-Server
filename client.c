@@ -125,12 +125,13 @@ void send_file();
 void get_file();
 void FILE_pack();
 struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock);
+bool is_received_package_via_tcp_valid(struct TCP_Package received_package,int expected_type);
 //FUNCIONS ADICIONALS
 char * get_type(int type);
 void get_time();
 char * get_status();
 void close_sockets_and_exit();
-
+struct timeval tcp_timeout;
 int main(int argc, char *argv[]){
     signal(SIGINT, close_sockets_and_exit);
     //LLEGIR I GUARDAR INFO FIXTER CFG
@@ -710,6 +711,21 @@ void get_file(){
     while (received_package.tipus != GET_END) {
         /* receive GET_DATA packages from server, ensure they're valid and fill conf file up */
         received_package = receive_package_via_tcp_from_server(w,sock);
+           if (tcp_timeout.tv_sec == 0) {
+            if (DEBUG_MODE == 0) {
+                char message[150];
+                sprintf(message, "ERROR -> Have not received any data on TCP socket during %d seconds\n", w);
+                printf("%s",message);
+            }
+            close(sock);
+            fclose(network_dev_config_file);
+            return;
+        } else if (!is_received_package_via_tcp_valid(received_package, GET_DATA) && !is_received_package_via_tcp_valid(received_package, GET_END) ) {
+            if (DEBUG_MODE == 0) { printf("ERROR -> Wrong package GET_DATA or GET_END received from server\n"); }
+            close(sock);
+            fclose(network_dev_config_file);
+            return;
+        }
         fputs(received_package.Dades, network_dev_config_file);
     }
     close(sock);
@@ -717,12 +733,26 @@ void get_file(){
     printf("INFO -> Successfully ended reception of configuration file from server\n");
 }
 
+bool is_received_package_via_tcp_valid(struct TCP_Package received_package,int expected_type) {
+    if (expected_type == GET_END) {
+        return (expected_type == received_package.tipus &&
+                strcmp(server_data.id_equip, received_package.id_equip) == 0 &&
+                strcmp(server_data.mac, received_package.mac) == 0 &&
+                strcmp(server_data.num_ale, received_package.num_ale) == 0 &&
+                strcmp("", received_package.Dades) == 0);
+    }
+    /* if packet's type is different than GET_END */
+    return (expected_type == received_package.tipus &&
+            strcmp(server_data.id_equip, received_package.id_equip) == 0 &&
+            strcmp(server_data.mac, received_package.mac) == 0 &&
+            strcmp(server_data.num_ale, received_package.num_ale) == 0);
+}
 struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock) {
     
     fd_set rfds;
     char *buf = malloc(sizeof(struct TCP_Package));
     struct TCP_Package *received_package = malloc(sizeof(struct TCP_Package));
-    struct timeval tcp_timeout;
+    
     FD_ZERO(&rfds); /* clears set */
     FD_SET(sock, &rfds); /* add socket to descriptor set */
     tcp_timeout.tv_sec = max_timeout;

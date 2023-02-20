@@ -100,7 +100,6 @@ time_t now;
 unsigned char STATUS = DISCONNECTED;
 int sent = 0;
 char *filename=NULL;
-char *filename1=NULL;
 void close_sockets_and_exit();
 
 //funcions llegir i guardar informacio del fitxer de cfg
@@ -636,8 +635,8 @@ void send_file(){
 
     FILE_pack();
     send_TCP_package(send_TCP_pack,sock);
-    recv_TCP_package(w,sock);
-    if(recieved_comm_pack.tipus == SEND_ACK){
+    struct TCP_Package received_package = receive_package_via_tcp_from_server(w,sock);
+    if(received_package.tipus == SEND_ACK){
         send_TCP_pack.tipus = SEND_DATA;
         if (file_to_send == NULL) {
             printf("Error opening file.\n");
@@ -655,16 +654,17 @@ void send_file(){
             strcat(send_TCP_pack.Dades, line);
             send_TCP_package(send_TCP_pack, sock);
         }
-        fclose(file_to_send);
         send_TCP_pack.tipus = SEND_END;
         memset(send_TCP_pack.Dades, 0, sizeof(send_TCP_pack.Dades));
         send_TCP_package(send_TCP_pack,sock);
+        fclose(file_to_send);
     }else{
         printf("%02d:%02d:%02d  => Tancant socket TCP ja que no s'ha rebut el SEND_ACK del servidor\n",tm.tm_hour, tm.tm_min, tm.tm_sec);
         close(sock);
         close_sockets_and_exit();
+        fclose(file_to_send);
     }
-
+    
 
 }
 

@@ -747,6 +747,7 @@ bool is_received_package_via_tcp_valid(struct TCP_Package received_package,int e
             strcmp(server_data.mac, received_package.mac) == 0 &&
             strcmp(server_data.num_ale, received_package.num_ale) == 0);
 }
+
 struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock) {
     
     fd_set rfds;
@@ -779,6 +780,7 @@ struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock)
 
     return *received_package;
 }
+
 void *send_alive(){
     addr_server.sin_port = htons(device.nmsUdpPort);
     while(true){
@@ -906,7 +908,7 @@ void FILE_pack(){
 void close_sockets_and_exit(){
     printf("\nSortint de client...\n");
     close(UDP_sock);
-    
     close(newsock);
+    free(device.nmsId);
     exit(0);
 }

@@ -86,10 +86,10 @@ FILE *config = NULL;
 FILE *file_to_send = NULL;
 int DEBUG_MODE = -1;
 struct Conf device;
-int UDP_sock,newsock; 
+int UDP_sock,newsock, sock; 
 struct sockaddr_in addr_server, addr_client, TCP_server, TCP_client;
 struct UDP_Package client_pack, server_pack, server_data, sendAlive;
-struct TCP_Package send_TCP_pack, recieved_comm_pack;
+struct TCP_Package send_TCP_pack;
 int failed_registers = 0;
 int break_loop = -1;
 int break_periodic_comm = -1;
@@ -118,13 +118,13 @@ void *input();
 void periodic_comunication();
 void *send_alive();
 int check_pack_info();
-void recv_TCP_package(int timeout, int socket);
-void send_TCP_package(struct TCP_Package pack, int socket);
+void setup_TCP_socket();
+void send_TCP_package(struct TCP_Package pack);
+struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock);
+bool is_received_package_via_tcp_valid(struct TCP_Package received_package,int expected_type);
 void send_file();
 void get_file();
 void FILE_pack();
-struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock);
-bool is_received_package_via_tcp_valid(struct TCP_Package received_package,int expected_type);
 //FUNCIONS ADICIONALS
 char * get_type(int type);
 void get_time();
@@ -544,49 +544,10 @@ void periodic_comunication(){
     }    
 }
 
-void recv_TCP_package(int timeout, int socket){
-    strcpy(recieved_comm_pack.Dades, "EMPTY");
-    struct  TCP_Package *recvd_pack = malloc(sizeof(struct TCP_Package));
-    
-    fd_set rfds;
-    FD_ZERO(&rfds);
-    FD_SET(socket, &rfds);
-    int retl;
-
-    if(timeout < 0){
-        retl = select(socket + 1, &rfds, NULL, NULL, NULL);
-    } else {
-        struct timeval time;
-        time.tv_sec = timeout;
-        time.tv_usec = 0;
-        retl = select(socket + 1, &rfds, NULL, NULL, &time);//there is no data to recieve?
-    }
-    
-    if(retl > 0){
-        //printf("2\n");
-        if(recv(socket, recvd_pack, sizeof(recvd_pack), 0) < 0){//se quede pillat al recv?
-            printf("Error en rebre el paquet \n");
-            exit(-1);
-        }
-        //printf("3\n");
-        recieved_comm_pack.tipus = recvd_pack->tipus;
-        strcpy(recieved_comm_pack.id_equip, recvd_pack->id_equip);
-        strcpy(recieved_comm_pack.mac, recvd_pack->mac);
-        strcpy(recieved_comm_pack.num_ale, recvd_pack->num_ale);
-        strcpy(recieved_comm_pack.Dades, recvd_pack->Dades);
-
-        if(DEBUG_MODE == 0){
-            printf("Rebut paquet tipus: %s amb elements -> id equip:%s, mac:%s, num_ale:%s, Dades:%s\n", get_type(recieved_comm_pack.tipus),recieved_comm_pack.id_equip, recieved_comm_pack.mac, recieved_comm_pack.num_ale, recieved_comm_pack.Dades);
-        }
-    }else {
-        printf("Fallo select , no data to recieve, retl < 0 : %d\n", retl);
-    }
-}
-
-void send_TCP_package(struct TCP_Package pack, int socket){
+void send_TCP_package(struct TCP_Package pack){
     int bytes_sent;
     
-    bytes_sent = send(socket, &pack, sizeof(pack), 0);
+    bytes_sent = write(sock, &pack, sizeof(pack));
     if(pack.tipus == SEND_END){
         printf("%02d:%02d:%02d  => Finalitzat l'enviament d'arxiu de configuració al servidor (%s)\n",tm.tm_hour, tm.tm_min, tm.tm_sec, filename);
     }else if(pack.tipus == SEND_FILE){
@@ -608,8 +569,7 @@ void send_TCP_package(struct TCP_Package pack, int socket){
     }
 }
 
-void send_file(){
-    int sock;
+void setup_TCP_socket(){
     struct hostent *ent;
     ent = gethostbyname(device.nmsId);
     if(!ent){
@@ -633,8 +593,12 @@ void send_file(){
         exit(-1);
     }
 
+}
+
+void send_file(){
+    setup_TCP_socket();
     FILE_pack();
-    send_TCP_package(send_TCP_pack,sock);
+    send_TCP_package(send_TCP_pack);
     struct TCP_Package received_package = receive_package_via_tcp_from_server(w,sock);
     if(received_package.tipus == SEND_ACK){
         send_TCP_pack.tipus = SEND_DATA;
@@ -652,11 +616,11 @@ void send_file(){
             
             // Append line to the Dades member of the package object
             strcat(send_TCP_pack.Dades, line);
-            send_TCP_package(send_TCP_pack, sock);
+            send_TCP_package(send_TCP_pack);
         }
         send_TCP_pack.tipus = SEND_END;
         memset(send_TCP_pack.Dades, 0, sizeof(send_TCP_pack.Dades));
-        send_TCP_package(send_TCP_pack,sock);
+        send_TCP_package(send_TCP_pack);
         fclose(file_to_send);
     }else{
         printf("%02d:%02d:%02d  => Tancant socket TCP ja que no s'ha rebut el SEND_ACK del servidor\n",tm.tm_hour, tm.tm_min, tm.tm_sec);
@@ -668,32 +632,8 @@ void send_file(){
 
 }
 
-void get_file(){
-    int sock;
-    struct hostent *ent;
-    ent = gethostbyname(device.nmsId);
-    if(!ent){
-        printf("Error al trobar %s \n", device.nmsId);
-        exit(-1);
-    }
- 
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    
-    if(sock < 0){
-        printf("Error en obrir el socket! \n");
-        exit(-1);
-    }
-    
-    memset(&TCP_server, 0, sizeof(struct sockaddr_in));
-    TCP_server.sin_family = AF_INET;
-    TCP_server.sin_addr.s_addr = (((struct in_addr *)ent->h_addr_list[0])->s_addr);
-    TCP_server.sin_port = htons(atoi(server_data.Dades));
-    if(connect(sock, (struct sockaddr*)&TCP_server, sizeof(struct sockaddr_in))< 0){
-        printf("Error al connectar el socket (TCP_socket_setup)\n");
-        exit(-1);
-    }
-
-
+void get_file(){;
+    setup_TCP_socket();
     FILE_pack(); 
     send_TCP_pack.tipus = GET_FILE;
     strcpy(send_TCP_pack.id_equip, device.id);
@@ -702,7 +642,7 @@ void get_file(){
     char result[1024];
     snprintf(result, sizeof(result), "%s", filename);
     strcpy(send_TCP_pack.Dades,result);
-    send_TCP_package(send_TCP_pack,sock);
+    send_TCP_package(send_TCP_pack);
 
     FILE *network_dev_config_file = fopen(filename, "w");
 

@@ -625,8 +625,9 @@ void send_file(){
     }else{
         printf("%02d:%02d:%02d  => Tancant socket TCP ja que no s'ha rebut el SEND_ACK del servidor\n",tm.tm_hour, tm.tm_min, tm.tm_sec);
         close(sock);
-        close_sockets_and_exit();
         fclose(file_to_send);
+        close_sockets_and_exit();
+        
     }
     
 

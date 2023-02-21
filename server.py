@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from concurrent.futures import thread
 from http import server
 import os
@@ -5,6 +7,7 @@ import random
 from re import I, T
 from select import select
 import socket
+import signal
 import struct
 import sys
 from telnetlib import STATUS
@@ -63,9 +66,8 @@ w = 3
 
 debug_mode = False
 authorized_clients = []
-server = None
 sockets = None
-
+servidor = None
 class Servidor:
     def __init__(self):
         self.id = None
@@ -73,10 +75,10 @@ class Servidor:
 
 class Client:
     def __init__(self):
-        self.name = None
-        self.state = "DISCONNECTED"
-        self.random_num = random.randint(0, 999999)
-        self.mac_address = None
+        self.id_equip = None
+        self.state = DISCONNECTED
+        self.num_ale = random.randint(0, 999999)
+        self.mac = None
         self.udp_port = None
         self.ip_address = None
         self.consecutive_non_received_alives = 0
@@ -156,91 +158,179 @@ def get_status(status):
         return "SEND_ALIVE"
 
 def manage_args(argv):
-    auth_file = None
+    global sockets
+    sockets = Sockets()
     server_file = None
+    auth_file = None
     for i in range(len(argv)):
         if argv[i] == "-d":
             global debug_mode
             debug_mode = True
-            print("Executant el mode debug")
+            print("Executant mode debug")
         elif argv[i] == "-c" and len(argv) > i + 1:
             try:
                 server_file = open(argv[i+1], "r")
             except IOError:
                 print("ERROR a l'obrir el fitxer de configuració especificat")
                 sys.exit(1)
-        elif argv[i] == "-u" and len(argv) > i + 1:
+        elif argv[i] == "u" and len(argv) > i + 1:
             try:
-                auth_file = open(argv[i+1], "r")
+                auth_file = open(argv[i+1],"r")
             except IOError:
-                print("ERROR a l'obrir el fitxer de clients especificat")
+                print("Error en obrir l'arxiu dels clients permesos indicat")
                 sys.exit(1)
+    if server_file is None:
+        try:
+            server_file = open("server.cfg","r")
+        except IOError:
+            print("Error en intentar obrir el fitxer predeterminar")
+            sys.exit(1)
+    if auth_file is None:
+        try:
+            auth_file = open("equips.dat","r")
+        except IOError:
+            print("Error en intatar obrir l'arxiu de clients autoritzats predeterminat")
+            sys.exit(1)
+    get_authorized_clients(auth_file)
+    get_server_data(server_file)
 
-        if server_file is None:
-            try:
-                server_file = open("server.cfg", "r")
-            except IOError:
-                print("ERROR a l'obrir el fitxer predeterminat")
-                sys.exit(1)
-
-        if auth_file is None:
-            try:
-                auth_file = open("equips.dat", "r")
-            except IOError:
-                print("ERROR a l'obrir el fitxer de clients predeterminat")
-                sys.exit(1)
-
-    # es guarda en un array els clients autoritzats
-
+def get_authorized_clients(auth_file):
     global authorized_clients
+    num_clients = 0
     for line in auth_file:
         if line != "\n":
-            line = line.strip("\n")
-            cli = Client()
-            cli.id_disp = line
-            authorized_clients.append(cli)
+            client = Client()
+            client_name, client_mac = line.split("\n")[0].split(" ")
+            client.id_equip = client_name
+            client.mac = client_mac
+            authorized_clients.append(client)
+            num_clients += 1
+
     auth_file.close()
+    if debug_mode:
+        print("DEBUG -> Read " + str(num_clients) + " allowed clients' data")
 
-    # es guarda en una instància Servidor les dades del fitxer
-
-    global server
-    server = Servidor()
+def get_server_data(server_file):
+    global servidor
+    global sockets
+    servidor = Servidor()
     for line in server_file:
         line = line.strip("\n")
-        temp = line.split(" = ")
+        temp = line.split(" ")
         if temp[0] == "Id":
-            server.id = temp[1]
+            servidor.id = temp[1]
         elif temp[0] == "UDP-port":
-            socket.UDP_port = int(temp[1])
+            sockets.udp_port = int(temp[1])
         elif temp[0] == "TCP-port":
-            socket.TCP_port = int(temp[1])
+            sockets.tcp_port = int(temp[1])
+        elif temp[0] == "MAC":
+            servidor.mac = temp[1]
     server_file.close()
 
+def list_clients():
+    print("--- ID.Equip ---   ----- STATE -----   --- MAC ---   ------ Random Number ------   ---------------Ip-Address---------------")
+    for cli in authorized_clients:
+        print("   " + cli.id_equip + "       "  + get_status(cli.state)+ "          " + cli.mac + "         " + str(cli.num_ale))
+
 def setup_UDP_socket():
-    Sockets.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    global sockets
+    sockets.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        Sockets.udp_socket.bind(("", Sockets.udp_port))
+        sockets.udp_socket.bind(("", sockets.udp_port))
     except socket.error:
         print("Error al bind (socket UDP)")
 
 def setup_TCP_socket():
-    Sockets.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    global sockets
+    sockets.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        Sockets.tpc_socket.bind(("", Sockets.tcp_port))
+        sockets.tcp_socket.bind(("", sockets.tcp_port))
     except socket.error:
         print("Error en el bind (socket TCP)")
 
+def print_accepted_commands():
+    print("INFO  -> Accepted commands are:\n" +
+            "\t\t    quit -> finishes server\n" +
+            "\t\t    list -> lists allowed clients")
+
+def read_from_stdin():
+    line = sys.stdin.readline()
+    return line.split("\n")[0]
+
+def terminal_input():
+    try:
+        while True:
+            command = read_from_stdin()
+            if command == "quit":
+                os.kill(os.getpid(), signal.SIGINT)
+            elif command == "list":
+                list_clients()
+            else:
+                print("ERROR -> " + command + " is not an accepted command")
+                print_accepted_commands()
+    except (KeyboardInterrupt, SystemExit):
+        return
+
+def service_loop():
+    """
+    initiates udp and tcp service loops:
+    creates a thread (daemon) to initiate tcp loop
+    and then initiates udp service loop
+    """
+    #thread_for_tcp = threading.Thread(target=tcp_service_loop)
+    #thread_for_tcp.daemon = True
+    #thread_for_tcp.start()
+
+    udp_service_loop()
+
+def udp_service_loop():
+    """
+    Waits for udp connection,
+    when getting connection creates a thread (daemon) to serve it and
+    keeps waiting for incoming connections on udp socket
+    """
+    if debug_mode:
+        print("DEBUG -> UDP socket enabled")
+
+    while True:
+        received_package_unpacked, client_ip_address, client_udp_port = \
+            receive_package_via_udp_from_client(84)
+
+def receive_package_via_udp_from_client(bytes_to_receive):
+    received_package_packed, (client_ip_address, client_udp_port) = sockets.udp_socket.\
+                                                                    recvfrom(bytes_to_receive)
+    received_package_unpacked = struct.unpack('B7s13s7s50s', received_package_packed)
+    package_type = received_package_unpacked[0]
+    client_name = received_package_unpacked[1].split(b"\x00")[0].decode("utf-8")
+    client_mac_address = received_package_unpacked[2].split(b"\x00")[0].decode("utf-8")
+    random_num = received_package_unpacked[3].split(b"\x00")[0].decode("utf-8")
+    data = received_package_unpacked[4].split(b"\x00")[0].decode("utf-8")
+
+    if debug_mode:
+        print("DEBUG -> \t\t Received " + convert_type_to_string(package_type) +
+                      "; \n" + "\t\t\t\t\t  Bytes: " + str(bytes_to_receive) + ", \n" +
+                      "\t\t\t\t\t  name: " + client_name + ", \n" +
+                      "\t\t\t\t\t  mac: " + client_mac_address + ", \n" +
+                      "\t\t\t\t\t  rand num: " + random_num + ", \n" +
+                      "\t\t\t\t\t  data: " + data + "\n")
+    return received_package_unpacked, client_ip_address, client_udp_port
+
 if __name__ == '__main__':
     try:
-
         manage_args(sys.argv)
         setup_UDP_socket()
         setup_TCP_socket()
+        
+        global input_thread
+        input_thread = threading.Thread(target=terminal_input, daemon=True)
+        input_thread.start()
+
+        service_loop()
 
     except(KeyboardInterrupt, SystemExit):
         print("Sortint del servidor...")
         if 'UDP_socket' in globals():
-            Sockets.udp_socket.close()
+            sockets.udp_socket.close()
         if 'TCP_socket' in globals():
-            Sockets.tcp_socket.close()
-        os._exit(0)
+            sockets.tcp_socket.close()
+        sys.exit()

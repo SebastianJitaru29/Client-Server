@@ -86,7 +86,7 @@ FILE *config = NULL;
 FILE *file_to_send = NULL;
 int DEBUG_MODE = -1;
 struct Conf device;
-int UDP_sock,newsock, sock; 
+int UDP_sock, sock; 
 struct sockaddr_in addr_server, addr_client, TCP_server, TCP_client;
 struct UDP_Package client_pack, server_pack, server_data, sendAlive;
 struct TCP_Package send_TCP_pack;
@@ -606,7 +606,11 @@ void send_file(){
             printf("Error opening file.\n");
             return;
         }
-
+        fd_set rfds;
+        if(select(file_to_send, &rfds, NULL, NULL, &tcp_timeout)<0){
+            printf("%02d:%02d:%02d  => Fitxer a enviar buit\n",tm.tm_hour, tm.tm_min, tm.tm_sec);
+        
+        }
         char line[150];
         while (fgets(line, sizeof(line), file_to_send) != NULL) {
             // Remove newline character from the end of the line
@@ -849,7 +853,6 @@ void FILE_pack(){
 void close_sockets_and_exit(){
     printf("\nSortint de client...\n");
     close(UDP_sock);
-    close(newsock);
     free(device.nmsId);
     exit(0);
 }

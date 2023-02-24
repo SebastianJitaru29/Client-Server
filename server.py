@@ -54,9 +54,9 @@ GET_REJ = 0x38
 GET_END = 0x3A
 
 J = 2
-S = 3
+K = 3
 R = 3
-K = 4
+W = 4
 clients_data_mutex = threading.Lock()
 debug_mode = False
 authorized_clients = []
@@ -90,6 +90,18 @@ class Sockets:
         self.tcp_socket = None
         self.tcp_port = None
 
+def construct_get_ack_package(client_id_equip,num_ale):
+    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(client_id_equip+".cfg"),'utf-8'))
+    return send_ack
+
+def construct_get_end_package(client_id_equip,num_ale):
+    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(""),'utf-8'))
+    return send_ack
+
+def construct_get_data_package(client_id_equip,num_ale,data):
+    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(data),'utf-8'))
+    return send_ack
+
 def construct_register_ack_package(client_random_num):
     register_ack = struct.pack('B7s13s7s50s',REG_ACK,bytes(str(servidor.id),'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(client_random_num),'utf-8'), bytes(str(sockets.tcp_port),'utf-8'))
     return register_ack
@@ -118,6 +130,18 @@ def construct_alive_nack_package(reason):
 def construct_alive_inf_package(reason):
     alive_inf =  struct.pack('B7s13s7s50s', ALIVE_INF, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str(reason), 'utf-8'))
     return alive_inf
+
+def construct_send_ack_package(client_id_equip,num_ale):
+    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(".cfg"),'utf-8'))
+    return send_ack
+
+def construct_send_rej_package(reason):
+    send_rej =  struct.pack('B7s13s7s50s', SEND_REJ,  bytes(str(""),'utf-8'), bytes(str("000000000000"),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
+    return send_rej
+
+def construct_send_nack_package(reason):
+    send_nack =  struct.pack('B7s13s7s50s', SEND_NACK, bytes(str(""),'utf-8'), bytes(str("000000000000"),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
+    return send_nack
 
 def get_client_random_num(client_name):
     for valid_client in authorized_clients:
@@ -321,14 +345,6 @@ def setup_UDP_socket():
     except socket.error:
         print("Error al bind (socket UDP)")
 
-def setup_TCP_socket():
-    global sockets
-    sockets.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        sockets.tcp_socket.bind(("", sockets.tcp_port))
-    except socket.error:
-        print("Error en el bind (socket TCP)")
-
 def print_accepted_commands():
     print("INFO  -> Accepted commands are:\n" +
             "\t\t    quit -> finishes server\n" +
@@ -343,7 +359,10 @@ def terminal_input():
         while True:
             command = read_from_stdin()
             if command == "quit":
+                sockets.tcp_socket.close()
+                sockets.udp_socket.close()
                 os.kill(os.getpid(), signal.SIGINT)
+                
             elif command == "list":
                 list_clients()
             else:
@@ -537,8 +556,97 @@ def udp_service_loop():
         thread_to_serve_udp_connection.daemon = True
         thread_to_serve_udp_connection.start()
 
-def tcp_service_loop():
+def recieve_package_via_tcp_from_client(socket, bytes_to_receive):
+    received_package_packed = socket.recv(bytes_to_receive)
+    received_package_unpacked = struct.unpack('B7s13s7s150s', received_package_packed)
+    package_type = received_package_unpacked[0]
+    client_name = received_package_unpacked[1].split(b"\x00")[0].decode("utf-8")
+    client_mac_address = received_package_unpacked[2].split(b"\x00")[0].decode("utf-8")
+    random_num = received_package_unpacked[3].split(b"\x00")[0].decode("utf-8")
+    data = received_package_unpacked[4].split(b"\x00")[0].decode("utf-8")
+    #if debug_mode:
+    print("DEBUG -> \t Received " + convert_type_to_string(package_type) +
+                      "; \n" + "\t  Bytes: " + str(bytes_to_receive) + ", \n" +
+                      "\t  name: " + client_name + ", \n" +
+                      "\t  mac: " + client_mac_address + ", \n" +
+                      "\t  rand num: " + random_num + ", \n" +
+                      "\t  data: " + data + "\n")
+    return received_package_unpacked
+
+def send_package_via_tcp_to_client(package_to_send, socket):
+    socket.sendall(package_to_send)
+    package_to_send_unpacked = struct.unpack('B7s13s7s150s', package_to_send)
+    #if debug_mode:
+    current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
+    print("DEBUG "+ str(current_time)+ "-> Sent " + convert_type_to_string(package_to_send_unpacked[0])
+                    + ";\n" + "\t Bytes: " + str(struct.calcsize('B7s13s7s50s')) + ",\n" +
+                    "\t name: " + package_to_send_unpacked[1].split(b"\x00")[0].decode("utf-8") + ",\n" +
+                    "\t mac: " + package_to_send_unpacked[2].split(b"\x00")[0].decode("utf-8") + ",\n" +
+                    "\t rand num: " + package_to_send_unpacked[3].split(b"\x00")[0].decode("utf-8") + ",\n" +
+                    "\t data: " + package_to_send_unpacked[4].split(b"\x00")[0].decode("utf-8") + "\n")
+
+def write_file(connection,client_id_equip):
+    print("2")
+    config_file = open(client_id_equip + ".cfg" , "w")
+    print("2-2")
+    package = recieve_package_via_tcp_from_client(connection,178)
+    print("2.5")
+    print(convert_type_to_string(package[0]))
+    while package[0] == SEND_DATA:
+        print("3")
+        data = package[4].split(b"\x00")[0].decode("utf-8")
+        config_file.write(data)
+        package = recieve_package_via_tcp_from_client(connection, 178)
+        
+    current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
+    print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
+    config_file.close()
+    connection.close()
+    print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
+   
+def recieve_user_config(received_package, connection,client_address):
+    print("1")
+    client = get_client_from_list(received_package[1].split(b"\x00")[0].decode("utf-8"))
+    pack = construct_send_ack_package(client.id_equip,client.num_ale)
+    send_package_via_tcp_to_client(pack,connection)
+    write_file(connection,client.id_equip)
+
+def serve_get_file(received_package_unpacked, client_address, connection):
+    print("1")
+    client = get_client_from_list(received_package_unpacked[1].split(b"\x00")[0].decode("utf-8"))
+    pack = construct_get_ack_package(client.id_equip,client.num_ale)
+    send_package_via_tcp_to_client(pack,connection)
+    send_file(connection,client.id_equip)
+
+def serve_tcp_connection(received_package_unpacked,connection, client_address):
+    package_type = received_package_unpacked[0]
+
+    if package_type == SEND_FILE:
+        recieve_user_config(received_package_unpacked, connection,client_address)
+    elif package_type == GET_FILE:
+        serve_get_file(received_package_unpacked, client_address, connection)
     return
+
+def tcp_service_loop():
+    if debug_mode:
+        print("DEBUG -> Establishing TCP connection")
+   
+    while(True):
+        new_socket, (ip_address, port) = sockets.tcp_socket.accept()
+        received_package_unpacked = recieve_package_via_tcp_from_client(new_socket, 178)
+       
+        thread_to_serve_tcp_connection = threading.Thread(target=serve_tcp_connection,
+                                                          args=(received_package_unpacked,
+                                                                new_socket, ip_address))
+        thread_to_serve_tcp_connection.daemon = True
+        thread_to_serve_tcp_connection.start()
+ 
+def setup_tcp_socket():
+    global sockets
+    sockets.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sockets.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sockets.tcp_socket.bind(("", sockets.tcp_port))
+    sockets.tcp_socket.listen(5)
 
 def service():
     """
@@ -556,8 +664,7 @@ if __name__ == '__main__':
     try:
         manage_args(sys.argv)
         setup_UDP_socket()
-        setup_TCP_socket()
-        
+        setup_tcp_socket()
         global input_thread
         input_thread = threading.Thread(target=terminal_input, daemon=True)
         input_thread.start()

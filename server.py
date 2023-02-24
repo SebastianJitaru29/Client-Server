@@ -90,6 +90,14 @@ class Sockets:
         self.tcp_socket = None
         self.tcp_port = None
 
+def construct_get_rej_package(reason):
+    send_ack = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
+    return send_ack
+
+def construct_get_nack_package(reason):
+    send_ack = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
+    return send_ack
+
 def construct_get_ack_package(client_id_equip,num_ale):
     send_ack = struct.pack('B7s13s7s150s',GET_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(client_id_equip+".cfg"),'utf-8'))
     return send_ack
@@ -604,7 +612,7 @@ def write_file(connection,client_id_equip):
     connection.close()
     print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
    
-def recieve_user_config(received_package, connection,client_address):
+def process_send_file_pack(received_package, connection,client_address):
     print("1")
     client = get_client_from_list(received_package[1].split(b"\x00")[0].decode("utf-8"))
     pack = construct_send_ack_package(client.id_equip,client.num_ale)
@@ -612,7 +620,16 @@ def recieve_user_config(received_package, connection,client_address):
     write_file(connection,client.id_equip)
 
 def send_config_file(connection,client_id_equip):
-    config_file = open(client_id_equip + ".cfg", "r")
+    try:
+        config_file = open(client_id_equip + ".cfg", "r")
+    except IOError:
+        if debug_mode:
+            print("DEBUG-> Rejected GET_FILE petitio." + client_id_equip + ".cfg can't be accessed or does not exist")
+        get_rej = construct_get_rej_package("file can't be accessed")
+        send_package_via_tcp_to_client(get_rej,connection)
+        connection.close()
+        config_file.close()
+
     client = get_client_from_list(client_id_equip)
     for line in config_file:
 
@@ -630,9 +647,20 @@ def send_config_file(connection,client_id_equip):
     current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
     print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
     
-def send_config_to_user(received_package,connection,client_address):
-    print("1")
+def process_get_file_pack(received_package,connection,client_address):
+    
     client = get_client_from_list(received_package[1].split(b"\x00")[0].decode("utf-8"))
+    if not are_name_and_mac_valid(client.id_equip,client.mac):
+        if debug_mode:
+            print("DEBUG -> Rejected petition of getting file.Invalid user")
+        get_rej = construct_get_rej_package("Invalid user")
+        send_package_via_tcp_to_client(get_rej,connection)
+        connection.close()
+    elif not are_random_num_and_ip_address_valid(client.id_equip,client.num_ale,client_address):
+        get_nack = construct_get_nack_package("wrong data received")
+        send_package_via_tcp_to_client(get_nack,connection)
+        connection.close()
+    
     pack = construct_get_ack_package(client.id_equip,client.num_ale)
     send_package_via_tcp_to_client(pack,connection)
     send_config_file(connection,client.id_equip)
@@ -641,9 +669,9 @@ def serve_tcp_connection(received_package_unpacked,connection, client_address):
     package_type = received_package_unpacked[0]
 
     if package_type == SEND_FILE:
-        recieve_user_config(received_package_unpacked, connection,client_address)
+        process_send_file_pack(received_package_unpacked, connection,client_address)
     elif package_type == GET_FILE:
-        send_config_to_user(received_package_unpacked, connection,client_address)
+        process_get_file_pack(received_package_unpacked, connection,client_address)
     return
 
 def tcp_service_loop():

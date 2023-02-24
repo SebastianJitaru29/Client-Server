@@ -91,15 +91,15 @@ class Sockets:
         self.tcp_port = None
 
 def construct_get_ack_package(client_id_equip,num_ale):
-    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(client_id_equip+".cfg"),'utf-8'))
+    send_ack = struct.pack('B7s13s7s150s',GET_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(client_id_equip+".cfg"),'utf-8'))
     return send_ack
 
 def construct_get_end_package(client_id_equip,num_ale):
-    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(""),'utf-8'))
+    send_ack = struct.pack('B7s13s7s150s',GET_END, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(""),'utf-8'))
     return send_ack
 
 def construct_get_data_package(client_id_equip,num_ale,data):
-    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(data),'utf-8'))
+    send_ack = struct.pack('B7s13s7s150s',GET_DATA, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(data),'utf-8'))
     return send_ack
 
 def construct_register_ack_package(client_random_num):
@@ -611,12 +611,31 @@ def recieve_user_config(received_package, connection,client_address):
     send_package_via_tcp_to_client(pack,connection)
     write_file(connection,client.id_equip)
 
-def serve_get_file(received_package_unpacked, client_address, connection):
+def send_config_file(connection,client_id_equip):
+    config_file = open(client_id_equip + ".cfg", "r")
+    client = get_client_from_list(client_id_equip)
+    for line in config_file:
+
+        pack = construct_get_data_package(client_id_equip,client.num_ale,line)
+        send_package_via_tcp_to_client(pack,connection)
+        time.sleep(.005)
+
+    pack = construct_get_end_package(client_id_equip,client.num_ale)
+    send_package_via_tcp_to_client(pack,connection)
+    current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
+    print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
+    
+    config_file.close()
+    connection.close()
+    current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
+    print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
+    
+def send_config_to_user(received_package,connection,client_address):
     print("1")
-    client = get_client_from_list(received_package_unpacked[1].split(b"\x00")[0].decode("utf-8"))
+    client = get_client_from_list(received_package[1].split(b"\x00")[0].decode("utf-8"))
     pack = construct_get_ack_package(client.id_equip,client.num_ale)
     send_package_via_tcp_to_client(pack,connection)
-    send_file(connection,client.id_equip)
+    send_config_file(connection,client.id_equip)
 
 def serve_tcp_connection(received_package_unpacked,connection, client_address):
     package_type = received_package_unpacked[0]
@@ -624,7 +643,7 @@ def serve_tcp_connection(received_package_unpacked,connection, client_address):
     if package_type == SEND_FILE:
         recieve_user_config(received_package_unpacked, connection,client_address)
     elif package_type == GET_FILE:
-        serve_get_file(received_package_unpacked, client_address, connection)
+        send_config_to_user(received_package_unpacked, connection,client_address)
     return
 
 def tcp_service_loop():

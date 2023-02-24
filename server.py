@@ -619,7 +619,7 @@ def process_send_file_pack(received_package, connection,client_address):
     send_package_via_tcp_to_client(pack,connection)
     write_file(connection,client.id_equip)
 
-def send_config_file(connection,client_id_equip):
+def send_config_file(connection,client_id_equip):#revisar, id_equip s'empegue a la linea enviada
     try:
         config_file = open(client_id_equip + ".cfg", "r")
     except IOError:

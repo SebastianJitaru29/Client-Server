@@ -569,13 +569,13 @@ def recieve_package_via_tcp_from_client(socket, bytes_to_receive):
     client_mac_address = received_package_unpacked[2].split(b"\x00")[0].decode("utf-8")
     random_num = received_package_unpacked[3].split(b"\x00")[0].decode("utf-8")
     data = received_package_unpacked[4].split(b"\x00")[0].decode("utf-8")
-    #if debug_mode:
-    print("DEBUG -> \t Received " + convert_type_to_string(package_type) +
-                      "; \n" + "\t  Bytes: " + str(bytes_to_receive) + ", \n" +
-                      "\t  name: " + client_name + ", \n" +
-                      "\t  mac: " + client_mac_address + ", \n" +
-                      "\t  rand num: " + random_num + ", \n" +
-                      "\t  data: " + data + "\n")
+    if debug_mode:
+        print("DEBUG -> \t Received " + convert_type_to_string(package_type) +
+                        "; \n" + "\t  Bytes: " + str(bytes_to_receive) + ", \n" +
+                        "\t  name: " + client_name + ", \n" +
+                        "\t  mac: " + client_mac_address + ", \n" +
+                        "\t  rand num: " + random_num + ", \n" +
+                        "\t  data: " + data + "\n")
     return received_package_unpacked
 
 def send_package_via_tcp_to_client(package_to_send, socket):
@@ -583,17 +583,17 @@ def send_package_via_tcp_to_client(package_to_send, socket):
     package_to_send_unpacked = struct.unpack('B7s13s7s150s', package_to_send)
     #if debug_mode:
     current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
-    print("DEBUG "+ str(current_time)+ "-> Sent " + convert_type_to_string(package_to_send_unpacked[0])
-                    + ";\n" + "\t Bytes: " + str(struct.calcsize('B7s13s7s50s')) + ",\n" +
-                    "\t name: " + package_to_send_unpacked[1].split(b"\x00")[0].decode("utf-8") + ",\n" +
-                    "\t mac: " + package_to_send_unpacked[2].split(b"\x00")[0].decode("utf-8") + ",\n" +
-                    "\t rand num: " + package_to_send_unpacked[3].split(b"\x00")[0].decode("utf-8") + ",\n" +
-                    "\t data: " + package_to_send_unpacked[4].split(b"\x00")[0].decode("utf-8") + "\n")
+    if debug_mode:
+        print("DEBUG "+ str(current_time)+ "-> Sent " + convert_type_to_string(package_to_send_unpacked[0])
+                        + ";\n" + "\t Bytes: " + str(struct.calcsize('B7s13s7s50s')) + ",\n" +
+                        "\t name: " + package_to_send_unpacked[1].split(b"\x00")[0].decode("utf-8") + ",\n" +
+                        "\t mac: " + package_to_send_unpacked[2].split(b"\x00")[0].decode("utf-8") + ",\n" +
+                        "\t rand num: " + package_to_send_unpacked[3].split(b"\x00")[0].decode("utf-8") + ",\n" +
+                        "\t data: " + package_to_send_unpacked[4].split(b"\x00")[0].decode("utf-8") + "\n")
 
 def write_file(connection,client_id_equip):
     config_file = open(client_id_equip + ".cfg" , "w")
     package = recieve_package_via_tcp_from_client(connection,178)
-    print(convert_type_to_string(package[0]))
     while package[0] == SEND_DATA:
         data = package[4].split(b"\x00")[0].decode("utf-8")
         config_file.write(data)
@@ -605,7 +605,6 @@ def write_file(connection,client_id_equip):
     print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
    
 def process_send_file_pack(received_package, connection,client_address):
-    print("1")
     client = get_client_from_list(received_package[1].split(b"\x00")[0].decode("utf-8"))
     pack = construct_send_ack_package(client.id_equip,client.num_ale)
     send_package_via_tcp_to_client(pack,connection)
@@ -633,7 +632,7 @@ def send_config_file(connection,client_id_equip):#revisar, id_equip s'empegue a 
     config_file.close()
     connection.close()
     current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
-    print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
+    print(str(current_time) + " => El equipo " + servidor.id + " ha finalizado su envío TCP")
     
 def process_get_file_pack(received_package,connection,client_address):
     
@@ -657,8 +656,12 @@ def serve_tcp_connection(received_package_unpacked,connection, client_address):
     package_type = received_package_unpacked[0]
 
     if package_type == SEND_FILE:
+        current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
+        print(str(current_time) + " => El equipo " + received_package_unpacked[1].split(b"\x00")[0].decode("utf-8") + " ha solicitado permiso para enviar su cfg file via TCP")
         process_send_file_pack(received_package_unpacked, connection,client_address)
     elif package_type == GET_FILE:
+        current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
+        print(str(current_time) + " => El equipo " + received_package_unpacked[1].split(b"\x00")[0].decode("utf-8") + " ha solicitado el cfg file su envío TCP")
         process_get_file_pack(received_package_unpacked, connection,client_address)
     return
 

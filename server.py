@@ -107,7 +107,7 @@ def construct_get_end_package(client_id_equip,num_ale):
     return send_ack
 
 def construct_get_data_package(client_id_equip,num_ale,data):
-    send_ack = struct.pack('B7s13s7s150s',GET_DATA, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(data),'utf-8'))
+    send_ack = struct.pack('B7s13s7s150s',GET_DATA, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'), bytes(str(data),'utf-8'))
     return send_ack
 
 def construct_register_ack_package(client_random_num):
@@ -494,7 +494,6 @@ def serve_client_register_via_udp(client,dades):
         alive_inf_timeout = datetime.now() + timedelta(seconds=(J*R))
         REG_ACK_package = construct_register_ack_package(get_client_random_num(client.id_equip))
         send_package_via_udp_to_client(REG_ACK_package, client.udp_port, client.ip_address)
-    
         keep_in_touch_with_client(client,alive_inf_timeout)
 
     if client.state == REGISTERED or client.state == ALIVE:
@@ -510,10 +509,8 @@ def serve_client_register_via_udp(client,dades):
 
 def serve_alive_inf(client,dades):
 
-    client1 = get_client_from_udp_port_and_ip(client.udp_port,client.ip_address)
-    
-    if client1 is not None:
-        client1.is_alive_recieved = True
+    if client is not None:
+        client.is_alive_received = True
     clients_data_mutex.acquire()
 
     if not are_name_and_mac_valid(client.id_equip, client.mac):
@@ -594,20 +591,15 @@ def send_package_via_tcp_to_client(package_to_send, socket):
                     "\t data: " + package_to_send_unpacked[4].split(b"\x00")[0].decode("utf-8") + "\n")
 
 def write_file(connection,client_id_equip):
-    print("2")
     config_file = open(client_id_equip + ".cfg" , "w")
-    print("2-2")
     package = recieve_package_via_tcp_from_client(connection,178)
-    print("2.5")
     print(convert_type_to_string(package[0]))
     while package[0] == SEND_DATA:
-        print("3")
         data = package[4].split(b"\x00")[0].decode("utf-8")
         config_file.write(data)
         package = recieve_package_via_tcp_from_client(connection, 178)
         
     current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
-    print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
     config_file.close()
     connection.close()
     print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
@@ -632,16 +624,12 @@ def send_config_file(connection,client_id_equip):#revisar, id_equip s'empegue a 
 
     client = get_client_from_list(client_id_equip)
     for line in config_file:
-
         pack = construct_get_data_package(client_id_equip,client.num_ale,line)
         send_package_via_tcp_to_client(pack,connection)
         time.sleep(.005)
 
     pack = construct_get_end_package(client_id_equip,client.num_ale)
-    send_package_via_tcp_to_client(pack,connection)
-    current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))
-    print(str(current_time) + " => El equipo " + client_id_equip + " ha finalizado su envío TCP")
-    
+    send_package_via_tcp_to_client(pack,connection) 
     config_file.close()
     connection.close()
     current_time = time.strftime("%H:%M:%S", time.localtime(time.time()))

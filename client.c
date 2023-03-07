@@ -125,12 +125,16 @@ bool is_received_package_via_tcp_valid(struct TCP_Package received_package,int e
 void send_file();
 void get_file();
 void FILE_pack();
+
 //FUNCIONS ADICIONALS
+bool isValidACK(struct TCP_Package pack);
 char * get_type(int type);
 void get_time();
 char * get_status();
 void close_sockets_and_exit();
 struct timeval tcp_timeout;
+//provar 2 clients amb els ervidor I PROVAR-HO en fedora copia lo del get en un altre file i comprovar q sigui bien
+//client no te encompte quin boot cfg ha de llegir , s'ha de tenir en compte ?
 int main(int argc, char *argv[]){
     signal(SIGINT, close_sockets_and_exit);
     //LLEGIR I GUARDAR INFO FIXTER CFG
@@ -426,7 +430,7 @@ void UDP_server_response(int timeout){
     
 
         if(DEBUG_MODE == 0){
-            //printf("%02d:%02d:%02d  => Rebut paquet:%s amb Dades:%s, id_equip rebut:%s, mac: %s, num ale:%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec,get_type(server_pack.tipus), server_pack.Dades, server_pack.id_equip, server_pack.mac,server_pack.num_ale);
+            printf("%02d:%02d:%02d  => Rebut paquet:%s amb Dades:%s, id_equip rebut:%s, mac: %s, num ale:%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec,get_type(server_pack.tipus), server_pack.Dades, server_pack.id_equip, server_pack.mac,server_pack.num_ale);
         }   
     }
 }
@@ -595,21 +599,28 @@ void setup_TCP_socket(){
 
 }
 
-void send_file(){
+bool isValidACK(struct TCP_Package pack){
+    if(strcmp(server_data.mac,pack.mac) != 0){
+        printf("Recieved mac :%s, authorized mac:%s.\n", pack.mac, server_data.mac);
+        printf("%02d:%02d:%02d  => Paqeut SEND_ACK rebut amb mac incorrecta \n",tm.tm_hour, tm.tm_min, tm.tm_sec);
+        return false;
+    }
+    return true;
+
+}
+
+void send_file(){ //fer que obri el fitxer a enviar aqui i el tanqui quan acabo
     setup_TCP_socket();
     FILE_pack();
     send_TCP_package(send_TCP_pack);
     struct TCP_Package received_package = receive_package_via_tcp_from_server(w,sock);
-    if(received_package.tipus == SEND_ACK){
+    if(received_package.tipus == SEND_ACK && isValidACK(received_package)){
+        //s'ha de comprovar la mac del send ack
+        
         send_TCP_pack.tipus = SEND_DATA;
         if (file_to_send == NULL) {
             printf("Error opening file.\n");
             return;
-        }
-        fd_set rfds;
-        if(select(file_to_send, &rfds, NULL, NULL, &tcp_timeout)<0){
-            printf("%02d:%02d:%02d  => Fitxer a enviar buit\n",tm.tm_hour, tm.tm_min, tm.tm_sec);
-        
         }
         char line[150];
         while (fgets(line, sizeof(line), file_to_send) != NULL) {
@@ -741,7 +752,7 @@ void *send_alive(){
             exit(-1);
         }
         if(DEBUG_MODE == 0){
-            //printf("%02d:%02d:%02d => Paquet_enviat amb id_equip:%s, Dades:%s, mac:%s, num ale:%s, tipus :%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec,sendAlive.id_equip,sendAlive.Dades,sendAlive.mac,sendAlive.num_ale,get_type(sendAlive.tipus));
+            printf("%02d:%02d:%02d => Paquet_enviat amb id_equip:%s, Dades:%s, mac:%s, num ale:%s, tipus :%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec,sendAlive.id_equip,sendAlive.Dades,sendAlive.mac,sendAlive.num_ale,get_type(sendAlive.tipus));
         }
         sleep(r);
     }

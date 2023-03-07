@@ -90,6 +90,8 @@ class Sockets:
         self.tcp_socket = None
         self.tcp_port = None
 
+#revisar send/get amb varios clients a l hora, borrar les funcions de construct packages
+
 def construct_get_rej_package(reason):
     send_ack = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
     return send_ack

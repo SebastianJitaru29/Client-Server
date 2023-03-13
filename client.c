@@ -203,7 +203,6 @@ void manage_args(int argc, char *argv[]){
     }
     if(file_to_send == NULL){
         if(access("boot.cfg", F_OK) != -1) {
-            file_to_send = fopen("boot.cfg", "r");
             filename = "boot.cfg";
         } else {
             printf("Error a l'obrir l'arxiu a enviar predeterminat\n");
@@ -611,6 +610,7 @@ bool isValidACK(struct TCP_Package pack){
 
 void send_file(){ //fer que obri el fitxer a enviar aqui i el tanqui quan acabo
     setup_TCP_socket();
+    file_to_send = fopen("boot.cfg", "r");
     FILE_pack();
     send_TCP_package(send_TCP_pack);
     struct TCP_Package received_package = receive_package_via_tcp_from_server(w,sock);

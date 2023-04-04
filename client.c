@@ -85,14 +85,14 @@ int w = 3;
 FILE *config = NULL;
 FILE *file_to_send = NULL;
 int DEBUG_MODE = -1;
-struct Conf device;
+struct Conf client;
 int UDP_sock, sock; 
 struct sockaddr_in addr_server, addr_client, TCP_server, TCP_client;
 struct UDP_Package client_pack, server_pack, server_data, sendAlive;
 struct TCP_Package send_TCP_pack;
-int failed_registers = 0;
+int register_atempts = 0;
 int break_loop = -1;
-int break_periodic_comm = -1;
+int end_periodic_communication = -1;
 pthread_t input_thread_id, send_alive_id;
 time_t t_;
 struct tm tm;
@@ -109,7 +109,7 @@ void show_info();
 
 //funcions per la creacio de socket i fase de registre
 void UDP_socket_setup();
-void register_process_loop();
+void register_in_server();
 void register_phase();
 int register_attempt();
 void UDP_server_response(int timeout);
@@ -133,8 +133,6 @@ void get_time();
 char * get_status();
 void close_sockets_and_exit();
 struct timeval tcp_timeout;
-//provar 2 clients amb els ervidor I PROVAR-HO en fedora copia lo del get en un altre file i comprovar q sigui bien
-//client no te encompte quin boot cfg ha de llegir , s'ha de tenir en compte ?
 int main(int argc, char *argv[]){
     signal(SIGINT, close_sockets_and_exit);
     //LLEGIR I GUARDAR INFO FIXTER CFG
@@ -148,10 +146,10 @@ int main(int argc, char *argv[]){
 
     do{
         break_loop = -1;
-        register_process_loop();
+        register_in_server();
         /*  ATENDRE COMANDES   */
         if(break_loop == 0){
-            break_periodic_comm = -1;
+            end_periodic_communication = -1;
             break_loop = -1;
             /*FIL QUE S'ENCARREGUE DE LLEGIR LES COMANDES INTRODUIDES PER TERMINAL*/
             pthread_create(&input_thread_id, NULL, input, NULL);
@@ -222,37 +220,37 @@ void store_config(){
        token = strtok(str, s);
        if (strcmp(token, "Id") == 0){
            token = strtok(NULL, s);
-           strncpy(device.id, token, strlen(token));
+           strncpy(client.id, token, strlen(token));
        } else if (strcmp(token, "MAC") == 0){
            token = strtok(NULL, s);
-           strncpy(device.mac,token, strlen(token));
+           strncpy(client.mac,token, strlen(token));
        } else if (strcmp(token, "NMS-Id") == 0){
            token = strtok(NULL, s);
-           device.nmsId = malloc(sizeof(token) + 1);
-           strncpy(device.nmsId, token, strlen(token));
+           client.nmsId = malloc(sizeof(token) + 1);
+           strncpy(client.nmsId, token, strlen(token));
        } else if (strcmp(token, "NMS-UDP-port") == 0){
            token = strtok(NULL, s);
-           device.nmsUdpPort = atoi(token);
+           client.nmsUdpPort = atoi(token);
        }
    }
 }
 
 void show_info(){
    printf("********************* DADES SOBRE EL SISTEMA DE GESTIO DE CONFIGURACIO *********************** \n");
-   printf(" Identificador: %s \n", device.id);
-   printf(" MAC : %s \n", device.mac);
-   printf(" NMS-Id: %s \n" , device.nmsId);
-   printf(" NMS-UDP-port: %d ", device.nmsUdpPort);
+   printf(" Identificador: %s \n", client.id);
+   printf(" MAC : %s \n", client.mac);
+   printf(" NMS-Id: %s \n" , client.nmsId);
+   printf(" NMS-UDP-port: %d ", client.nmsUdpPort);
    printf("\n************************************************************ \n");
 }
 
 void UDP_socket_setup(){
 
     struct hostent *ent;
-    ent = gethostbyname(device.nmsId);
+    ent = gethostbyname(client.nmsId);
     
     if(!ent){
-        printf("Error al trobar %s \n", device.nmsId);
+        printf("Error al trobar %s \n", client.nmsId);
         exit(-1);
     }
     
@@ -276,10 +274,10 @@ void UDP_socket_setup(){
     memset(&addr_server, 0, sizeof(struct sockaddr_in));
     addr_server.sin_family = AF_INET;
     addr_server.sin_addr.s_addr = (((struct in_addr *)ent->h_addr_list[0])->s_addr);
-    addr_server.sin_port = htons(device.nmsUdpPort);
+    addr_server.sin_port = htons(client.nmsUdpPort);
 }
 
-void register_process_loop(){
+void register_in_server(){
     sleep(0.5);
     /* Fase de registre, on es fa el primer intercanvi de paquets per a realitzar-lo , s'envia el primer paquet REGISTER_REQ i pasa a registerd */
     register_phase();
@@ -303,7 +301,7 @@ void register_process_loop(){
                 printf("%02d:%02d:%02d  => Paquet REQUEST_ACK rebut sense dades.Dispositiu passa a l'estat: %s \n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_status());
                 get_time();
                 printf("%02d:%02d:%02d  => Dispositiu passa a l'estat: %s \n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_status());
-                failed_registers += 1;
+                register_atempts += 1;
                 break_loop = -1;
                 break;
             }
@@ -316,7 +314,7 @@ void register_process_loop(){
             if(DEBUG_MODE == 0){
                 printf("%02d:%02d:%02d  => Dispositiu passa a l'estat: %s \n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_status());
             }
-            failed_registers++;
+            register_atempts++;
             register_phase();
 
         } else if (server_pack.tipus == REG_REJ){
@@ -332,7 +330,7 @@ void register_process_loop(){
             printf("%02d:%02d:%02d  => Paquet reubut invalid. Dispositiu passa a l'estat: %s \n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_status());
             printf("%02d:%02d:%02d  => Rebut paquet:%s\n",tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(server_pack.tipus));
             sleep(1);
-            failed_registers += 1;
+            register_atempts += 1;
             break;
 
         }
@@ -343,11 +341,11 @@ void register_process_loop(){
 void register_phase(){
 
     client_pack.tipus = REG_REQ;
-    strcpy(client_pack.id_equip, device.id);
-    strcpy(client_pack.mac, device.mac);
+    strcpy(client_pack.id_equip, client.id);
+    strcpy(client_pack.mac, client.mac);
     strcpy(client_pack.num_ale,"000000");
     strcpy(client_pack.Dades,"\0");
-        while(failed_registers < 2){
+        while(register_atempts < 2){
     
             get_time();
             STATUS = WAIT_REG_RESPONSE;
@@ -356,7 +354,7 @@ void register_phase(){
             if(register_attempt() == 0){ // s'envia el paquet REG_REQ i el servidor contesta correctament
                 return;
             }
-            failed_registers += 1;
+            register_atempts += 1;
         }
     
     get_time();
@@ -371,7 +369,7 @@ int register_attempt(){
  
     while(true){
 
-        addr_server.sin_port = htons(device.nmsUdpPort);
+        addr_server.sin_port = htons(client.nmsUdpPort);
         if(DEBUG_MODE == 0){
             printf("Enviant paquet %s\n", get_type(client_pack.tipus));
         }
@@ -481,14 +479,14 @@ void periodic_comunication(){
     int is_first = 0;
     int alives_not_recieved = 0;
     //int is_TCP_running = -1;
-    while(break_periodic_comm != 0){
+    while(end_periodic_communication != 0){
  
         UDP_server_response(2*u);
 
         if(is_first == 0 && strcmp(server_pack.Dades, "EMPTY") == 0){
             get_time();
             printf("%02d:%02d:%02d => No s'ha rebut el primer ALIVE. Començant un nou procés de registre \n", tm.tm_hour, tm.tm_min, tm.tm_sec);
-            failed_registers += 1;
+            register_atempts += 1;
             break_loop = -1;
             return;
         }
@@ -502,7 +500,7 @@ void periodic_comunication(){
             get_time();
             printf("%02d:%02d:%02d  => S'han deixat de rebre 3 alives consecutius. Començant nou procés de registre \n", tm.tm_hour, tm.tm_min, tm.tm_sec);
             pthread_cancel(send_alive_id);
-            failed_registers += 1;
+            register_atempts += 1;
             break_loop = -1;
             return;
         }
@@ -513,11 +511,6 @@ void periodic_comunication(){
                STATUS = ALIVE;
                printf("%02d:%02d:%02d  => Dispositiu passa a l'estat: %s \n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_status());
                is_first = -1;
-               /*
-               if(TCP_sock_send == -1){
-                   is_TCP_running = 0;
-                   TCP_socket_setup();
-               }*/
             }
  
         } else if(server_pack.tipus == ALIVE_REJ && STATUS == ALIVE){
@@ -525,20 +518,17 @@ void periodic_comunication(){
             get_time();
             STATUS = DISCONNECTED;
             printf("%02d:%02d:%02d  => Rebut ALIVE_REJ. Possible suplantació d'identitat . Dispositiu passa a l'estat: %s . Reiniciant procés de registre...\n \n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_status());
-            break_periodic_comm = 0;
-            failed_registers += 1;
-            /*close(TCP_sock_send);
-            if(is_TCP_running == 0){
-                close(TCP_sock_send);
-            }*/
+            end_periodic_communication = 0;
+            register_atempts += 1;
+           
             
             pthread_cancel(send_alive_id);
 
         } else if (server_pack.tipus == ALIVE_NACK) {
            get_time();
            printf("%02d:%02d:%02d  =>  Paquet rebut %s. s'obviara el paquet i contara com a que el servidor no ha enviat respota\n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(server_pack.tipus));
-           break_periodic_comm = 0;
-           failed_registers += 1;
+           end_periodic_communication = 0;
+           register_atempts += 1;
         } else {
             get_time();
             printf("%02d:%02d:%02d  =>  Paquet rebut %s. amb dades incorrectes\n", tm.tm_hour, tm.tm_min, tm.tm_sec, get_type(server_pack.tipus));
@@ -574,9 +564,9 @@ void send_TCP_package(struct TCP_Package pack){
 
 void setup_TCP_socket(){
     struct hostent *ent;
-    ent = gethostbyname(device.nmsId);
+    ent = gethostbyname(client.nmsId);
     if(!ent){
-        printf("Error al trobar %s \n", device.nmsId);
+        printf("Error al trobar %s \n", client.nmsId);
         exit(-1);
     }
  
@@ -652,8 +642,8 @@ void get_file(){;
     setup_TCP_socket();
     FILE_pack(); 
     send_TCP_pack.tipus = GET_FILE;
-    strcpy(send_TCP_pack.id_equip, device.id);
-    strcpy(send_TCP_pack.mac, device.mac);
+    strcpy(send_TCP_pack.id_equip, client.id);
+    strcpy(send_TCP_pack.mac, client.mac);
     strcpy(send_TCP_pack.num_ale,server_pack.num_ale);
     char result[1024];
     snprintf(result, sizeof(result), "%s", filename);
@@ -738,11 +728,11 @@ struct TCP_Package receive_package_via_tcp_from_server(int max_timeout,int sock)
 }
 
 void *send_alive(){
-    addr_server.sin_port = htons(device.nmsUdpPort);
+    addr_server.sin_port = htons(client.nmsUdpPort);
     while(true){
         sendAlive.tipus = ALIVE_INF;
-        strcpy(sendAlive.id_equip, device.id);
-        strcpy(sendAlive.mac, device.mac);
+        strcpy(sendAlive.id_equip, client.id);
+        strcpy(sendAlive.mac, client.mac);
         strcpy(sendAlive.num_ale,server_pack.num_ale);
         //strcpy(sendAlive.Dades,"");
         
@@ -853,8 +843,8 @@ void FILE_pack(){
     rewind(file_to_send);
     /*Es crea el SEND_FILE*/
     send_TCP_pack.tipus = SEND_FILE;
-    strcpy(send_TCP_pack.id_equip, device.id);
-    strcpy(send_TCP_pack.mac, device.mac);
+    strcpy(send_TCP_pack.id_equip, client.id);
+    strcpy(send_TCP_pack.mac, client.mac);
     strcpy(send_TCP_pack.num_ale,server_pack.num_ale);
     char result[1024];
     snprintf(result, sizeof(result), "%s,%ld", filename, file_length);
@@ -864,6 +854,6 @@ void FILE_pack(){
 void close_sockets_and_exit(){
     printf("\nSortint de client...\n");
     close(UDP_sock);
-    free(device.nmsId);
+    free(client.nmsId);
     exit(0);
 }

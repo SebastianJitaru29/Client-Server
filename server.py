@@ -72,6 +72,7 @@ class Client:
         self.id_equip = None
         self.state = DISCONNECTED
         self.num_ale = random.randint(0, 999999)
+        self.num_ale_recieved = None
         self.mac = None
         self.udp_port = None
         self.ip_address = None
@@ -89,8 +90,6 @@ class Sockets:
 
         self.tcp_socket = None
         self.tcp_port = None
-
-#revisar send/get amb varios clients a l hora, borrar les funcions de construct packages
 
 def construct_get_rej_package(reason):
     send_ack = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
@@ -270,7 +269,7 @@ def get_status(status):
     elif status == REGISTERED:
         return "REGISTERED"
     else:
-        return "SEND_ALIVE"
+        return "ALIVE"
 
 def manage_args(argv):
     global sockets
@@ -343,7 +342,7 @@ def get_server_data(server_file):
     server_file.close()
 
 def list_clients():
-    print("--- ID.Equip ---   ----- STATE -----   --- MAC ---   ------ Random Number ------   ---------------Ip-Address---------------")
+    print("--- ID.Equip ---   ----- STATE -----   --- MAC ---   ------ Random Number ------")
     for cli in authorized_clients:
         print("   " + cli.id_equip + "       "  + get_status(cli.state)+ "          " + cli.mac + "         " + str(cli.num_ale))
 
@@ -418,7 +417,7 @@ def recive_package_from_udp():
                       "\t  data: " + dades + "\n")
     return client_ip_address,client_udp_port,package_type,client_id_equip,client_mac,num_ale,dades
 
-def keep_in_touch_with_client(client, first_alive_inf_timeout):
+def periodic_comunication(client, first_alive_inf_timeout):
     """
     Makes sure client stays in touch with server using udp socket by checking whether
     client.is_alive_received is True before a countdown.
@@ -441,7 +440,7 @@ def keep_in_touch_with_client(client, first_alive_inf_timeout):
                     time.sleep(0.01)
                 if not is_first_alive_received:
                     print("INFO  -> Have not received first ALIVE_INF in "
-                                  + str(J * R) + " seconds")
+                                  + str(W) + " seconds")
                     clients_data_mutex.acquire()
                     change_client_state(client.id_equip, DISCONNECTED)
                     clients_data_mutex.release()
@@ -468,11 +467,10 @@ def keep_in_touch_with_client(client, first_alive_inf_timeout):
                         clients_data_mutex.release()
                         return
                     clients_data_mutex.release()
-        # datetime.now() is None when main thread exits, so could throw AttributeError
         except AttributeError:
             return
 
-def serve_client_register_via_udp(client,dades):
+def process_reg_req(client,dades):
 
     change_client_state(client.id_equip,WAIT_DB_CHECK)
 
@@ -483,9 +481,9 @@ def serve_client_register_via_udp(client,dades):
         REG_REJ_package =construct_register_rej_package("Client no autoritzat")
         send_package_via_udp_to_client(REG_REJ_package, client.udp_port, client.ip_address)
         change_client_state(client.id_equip, DISCONNECTED)
-        return
+        return 
     if client.state == WAIT_DB_CHECK:
-        if client.num_ale != "000000":
+        if client.num_ale_recieved != "000000":
             if debug_mode:
                 print("Rebuda peticio de registre amb numero aleatori incorrecte, hauria de ser :000000 ")
             register_nack_package = construct_register_nack_package("wrong data recieved")
@@ -496,7 +494,7 @@ def serve_client_register_via_udp(client,dades):
         alive_inf_timeout = datetime.now() + timedelta(seconds=(J*R))
         REG_ACK_package = construct_register_ack_package(get_client_random_num(client.id_equip))
         send_package_via_udp_to_client(REG_ACK_package, client.udp_port, client.ip_address)
-        keep_in_touch_with_client(client,alive_inf_timeout)
+        periodic_comunication(client,alive_inf_timeout)
 
     if client.state == REGISTERED or client.state == ALIVE:
         if not are_random_num_and_ip_address_valid(client.id_equip,client.num_ale, client.ip_address):
@@ -509,7 +507,7 @@ def serve_client_register_via_udp(client,dades):
     register_ack_package  = construct_register_ack_package(get_client_random_num(client.id_equip))
     send_package_via_udp_to_client(register_ack_package,client.udp_port,client.ip_address)
 
-def serve_alive_inf(client,dades):
+def process_alive_inf(client,dades):
 
     if client is not None:
         client.is_alive_received = True
@@ -535,11 +533,11 @@ def serve_alive_inf(client,dades):
         alive_ack_package = construct_alive_ack_package(client.num_ale)
         send_package_via_udp_to_client(alive_ack_package,client.udp_port,client.ip_address)
 
-def udp_conection(client, package_type, dades):
+def manage_udp_conection(client, package_type, dades):
     if package_type == REG_REQ:
-        serve_client_register_via_udp(client,dades)
+        process_reg_req(client,dades)
     elif package_type == ALIVE_INF:
-        serve_alive_inf(client,dades)
+        process_alive_inf(client,dades)
 
 def udp_service_loop():
     """
@@ -553,15 +551,18 @@ def udp_service_loop():
     while True:
         clients_data_mutex.acquire()
         client_ip_address, client_udp_port, package_type, client_id_equip, client_mac, num_ale, dades = recive_package_from_udp()
-        client = get_client_from_list(client_id_equip)
-        client.ip_address = client_ip_address
-        client.udp_port = client_udp_port
-        client.mac = client_mac
-        client.num_ale = num_ale
-        clients_data_mutex.release()
-        thread_to_serve_udp_connection = threading.Thread(target=udp_conection,args=(client, package_type, dades))
-        thread_to_serve_udp_connection.daemon = True
-        thread_to_serve_udp_connection.start()
+        if not is_authorized(client_id_equip,client_mac): 
+            print("INFO -> Client no autoritzat\n")
+        else:
+            client = get_client_from_list(client_id_equip)
+            client.ip_address = client_ip_address
+            client.udp_port = client_udp_port
+            client.mac = client_mac
+            client.num_ale_recieved = num_ale
+            clients_data_mutex.release()
+            thread_to_serve_udp_connection = threading.Thread(target=manage_udp_conection,args=(client, package_type, dades))
+            thread_to_serve_udp_connection.daemon = True
+            thread_to_serve_udp_connection.start()
 
 def recieve_package_via_tcp_from_client(socket, bytes_to_receive):
     received_package_packed = socket.recv(bytes_to_receive)
@@ -654,7 +655,7 @@ def process_get_file_pack(received_package,connection,client_address):
     send_package_via_tcp_to_client(pack,connection)
     send_config_file(connection,client.id_equip)
 
-def serve_tcp_connection(received_package_unpacked,connection, client_address):
+def manage_tcp_connection(received_package_unpacked,connection, client_address):
     package_type = received_package_unpacked[0]
 
     if package_type == SEND_FILE:
@@ -675,7 +676,7 @@ def tcp_service_loop():
         new_socket, (ip_address, port) = sockets.tcp_socket.accept()
         received_package_unpacked = recieve_package_via_tcp_from_client(new_socket, 178)
        
-        thread_to_serve_tcp_connection = threading.Thread(target=serve_tcp_connection,
+        thread_to_serve_tcp_connection = threading.Thread(target=manage_tcp_connection,
                                                           args=(received_package_unpacked,
                                                                 new_socket, ip_address))
         thread_to_serve_tcp_connection.daemon = True

@@ -358,14 +358,6 @@ def recive_package_from_udp():
     return client_ip_address,client_udp_port,package_type,client_id_equip,client_mac,num_ale,dades
 
 def periodic_comunication(client, first_alive_inf_timeout):
-    """
-    Makes sure client stays in touch with server using udp socket by checking whether
-    client.is_alive_received is True before a countdown.
-    client.is_alive_received is changed to True on serve_alive_inf function when
-    receiving an ALIVE_INF pdu and then changed to False inside this function.
-    :param client: client that must keep in touch
-    :param first_alive_inf_timeout: maximum datetime to receive first alive_inf
-    """
 
     while True:
         try:
@@ -487,11 +479,7 @@ def manage_udp_conection(client, package_type, dades):
         process_alive_inf(client,dades)
 
 def udp_service_loop():
-    """
-    Waits for udp connection,
-    when getting connection creates a thread (daemon) to serve it and
-    keeps waiting for incoming connections on udp socket
-    """
+   
     if debug_mode:
         print("DEBUG -> UDP socket enabled")
 
@@ -638,11 +626,6 @@ def setup_tcp_socket():
     sockets.tcp_socket.listen(5)
 
 def service():
-    """
-    initiates udp and tcp service loops:
-    creates a thread (daemon) to initiate tcp loop
-    and then initiates udp service loop
-    """
     thread_for_tcp = threading.Thread(target=tcp_service_loop)
     thread_for_tcp.daemon = True
     thread_for_tcp.start()
@@ -651,13 +634,17 @@ def service():
 
 if __name__ == '__main__':
     try:
+        #function that manages the arguments introduced when executing the server
         manage_args(sys.argv)
+        #opening the udp socket
         setup_UDP_socket()
+        #opening the tcp socket
         setup_tcp_socket()
+        #thread that will be in charge of the inputs from diferent clients
         global input_thread
         input_thread = threading.Thread(target=terminal_input, daemon=True)
         input_thread.start()
-
+        #functions that provides the different services to the clients
         service()
 
     except(KeyboardInterrupt, SystemExit):

@@ -451,8 +451,7 @@ void *input(){
             token = strtok(input_com, s);
 
             if(token && strcmp(token, "send-cfg" ) == 0 && STATUS == ALIVE){
-                if(token){
-                    printf("Sending cfg file to server...\n");
+                if(token){      
                     send_file();
                 } else {
                     printf("Error en la comanda send-cfg\n");
@@ -460,8 +459,9 @@ void *input(){
                 
             } else if(token && strcmp(token, "get-cfg") == 0 && STATUS == ALIVE){
                 if(token){
-                    printf("Getting cfg file from server...\n");
+                    printf("%02d:%02d:%02d  => Getting cfg file from server...\n",tm.tm_hour, tm.tm_min, tm.tm_sec);
                     get_file();
+                    printf("%02d:%02d:%02d  => File cfg recieved correctly\n",tm.tm_hour, tm.tm_min, tm.tm_sec);
                 } else {
                     printf("Error en la comanda get-cfg\n");
                 }
@@ -545,7 +545,7 @@ void send_TCP_package(struct TCP_Package pack){
         printf("%02d:%02d:%02d  => Finalitzat l'enviament d'arxiu de configuració al servidor (%s)\n",tm.tm_hour, tm.tm_min, tm.tm_sec, filename);
     }else if(pack.tipus == SEND_FILE){
         printf("%02d:%02d:%02d  => Sol·licitud d'enviament d'arxiu de configuració al servidor (%s)\n",tm.tm_hour, tm.tm_min, tm.tm_sec, filename);
-    }else if(pack.tipus == SEND_DATA){
+    }else if(pack.tipus == SEND_DATA && DEBUG_MODE == 0){
         printf("%02d:%02d:%02d  => Enviant paquet amb linea: %d de l'arxiu de configuració al servidor (%s)\n",tm.tm_hour, tm.tm_min, tm.tm_sec, sent, filename);
         sent++;
     }

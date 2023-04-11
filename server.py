@@ -91,66 +91,6 @@ class Sockets:
         self.tcp_socket = None
         self.tcp_port = None
 
-def construct_get_rej_package(reason):
-    send_ack = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
-    return send_ack
-
-def construct_get_nack_package(reason):
-    send_ack = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
-    return send_ack
-
-def construct_get_ack_package(client_id_equip,num_ale):
-    send_ack = struct.pack('B7s13s7s150s',GET_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(client_id_equip+".cfg"),'utf-8'))
-    return send_ack
-
-def construct_get_end_package(client_id_equip,num_ale):
-    send_ack = struct.pack('B7s13s7s150s',GET_END, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(""),'utf-8'))
-    return send_ack
-
-def construct_get_data_package(client_id_equip,num_ale,data):
-    send_ack = struct.pack('B7s13s7s150s',GET_DATA, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'), bytes(str(data),'utf-8'))
-    return send_ack
-
-def construct_register_ack_package(client_random_num):
-    register_ack = struct.pack('B7s13s7s50s',REG_ACK,bytes(str(servidor.id),'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(client_random_num),'utf-8'), bytes(str(sockets.tcp_port),'utf-8'))
-    return register_ack
-
-def construct_register_nack_package(reason):
-    reg_nack =  struct.pack('B7s13s7s50s', REG_NACK, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str(reason), 'utf-8'))
-    return reg_nack
-
-def construct_register_rej_package(reason):
-    #tots els camps de la pdu amb valors a 0 i el motiu del rebuig , no estan posats a 0 perque es mes simple a l hora de debugar
-    register_rej =  struct.pack('B7s13s7s50s', REG_REJ, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str(reason), 'utf-8'))
-    return register_rej
-
-def construct_alive_ack_package(num_ale):
-    alive_ack =  struct.pack('B7s13s7s50s', ALIVE_ACK, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale), 'utf-8'), bytes(str(""), 'utf-8'))
-    return alive_ack
-
-def construct_alive_rej_package(reason):
-    alive_rej =  struct.pack('B7s13s7s50s', ALIVE_REJ, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str(reason), 'utf-8'))
-    return alive_rej
-
-def construct_alive_nack_package(reason):
-    alive_nack =  struct.pack('B7s13s7s50s', ALIVE_NACK, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str(reason), 'utf-8'))
-    return alive_nack
-
-def construct_alive_inf_package(reason):
-    alive_inf =  struct.pack('B7s13s7s50s', ALIVE_INF, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str(reason), 'utf-8'))
-    return alive_inf
-
-def construct_send_ack_package(client_id_equip,num_ale):
-    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(".cfg"),'utf-8'))
-    return send_ack
-
-def construct_send_rej_package(reason):
-    send_rej =  struct.pack('B7s13s7s50s', SEND_REJ,  bytes(str(""),'utf-8'), bytes(str("000000000000"),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
-    return send_rej
-
-def construct_send_nack_package(reason):
-    send_nack =  struct.pack('B7s13s7s50s', SEND_NACK, bytes(str(""),'utf-8'), bytes(str("000000000000"),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str(reason),'utf-8'))
-    return send_nack
 
 def get_client_random_num(client_name):
     for valid_client in authorized_clients:
@@ -478,34 +418,39 @@ def process_reg_req(client,dades):
         if debug_mode == True:
             print("Rebut paquet REG_REQ; informació incorrecta o client no autoritzat. S'envia REG_REJ")
         #generar paquet REG_REJ
-        REG_REJ_package =construct_register_rej_package("Client no autoritzat")
-        send_package_via_udp_to_client(REG_REJ_package, client.udp_port, client.ip_address)
+        #tots els camps de la pdu amb valors a 0 i el motiu del rebuig , no estan posats a 0 perque es mes simple a l hora de debugar
+        register_rej =  struct.pack('B7s13s7s50s', REG_REJ, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str("Client no autoritzat"), 'utf-8'))
+    
+        send_package_via_udp_to_client(register_rej, client.udp_port, client.ip_address)
         change_client_state(client.id_equip, DISCONNECTED)
         return 
     if client.state == WAIT_DB_CHECK:
         if client.num_ale_recieved != "000000":
             if debug_mode:
                 print("Rebuda peticio de registre amb numero aleatori incorrecte, hauria de ser :000000 ")
-            register_nack_package = construct_register_nack_package("wrong data recieved")
-            send_package_via_udp_to_client(register_nack_package,client.udp_port,client.ip_address)
+            reg_nack =  struct.pack('B7s13s7s50s', REG_NACK, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str("wrong data recieved"), 'utf-8'))
+
+            send_package_via_udp_to_client(reg_nack,client.udp_port,client.ip_address)
             return
         change_client_state(client.id_equip,REGISTERED)
         
         alive_inf_timeout = datetime.now() + timedelta(seconds=(J*R))
-        REG_ACK_package = construct_register_ack_package(get_client_random_num(client.id_equip))
-        send_package_via_udp_to_client(REG_ACK_package, client.udp_port, client.ip_address)
+        register_ack = struct.pack('B7s13s7s50s',REG_ACK,bytes(str(servidor.id),'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(get_client_random_num(client.id_equip)),'utf-8'), bytes(str(sockets.tcp_port),'utf-8'))
+
+        send_package_via_udp_to_client(register_ack, client.udp_port, client.ip_address)
         periodic_comunication(client,alive_inf_timeout)
 
     if client.state == REGISTERED or client.state == ALIVE:
         if not are_random_num_and_ip_address_valid(client.id_equip,client.num_ale, client.ip_address):
-            register_nack_package = construct_alive_nack_package("wrong data recieved")
-            send_package_via_udp_to_client(register_nack_package,client.udp_port,client.ip_adress)
+            alive_nack =  struct.pack('B7s13s7s50s', ALIVE_NACK, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str("wrong data recieved"), 'utf-8'))
+
+            send_package_via_udp_to_client(alive_nack,client.udp_port,client.ip_adress)
             return
     clients_data_mutex.acquire()
     change_client_state(client.id_equip, REGISTERED)
     clients_data_mutex.release()
-    register_ack_package  = construct_register_ack_package(get_client_random_num(client.id_equip))
-    send_package_via_udp_to_client(register_ack_package,client.udp_port,client.ip_address)
+    register_ack = struct.pack('B7s13s7s50s',REG_ACK,bytes(str(servidor.id),'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(get_client_random_num(client.id_equip)),'utf-8'), bytes(str(sockets.tcp_port),'utf-8'))
+    send_package_via_udp_to_client(register_ack,client.udp_port,client.ip_address)
 
 def process_alive_inf(client,dades):
 
@@ -517,21 +462,23 @@ def process_alive_inf(client,dades):
         if debug_mode:
             print("ALIVE_INF recieved from invalid user:" + client.id_equip + "ip:" + client.ip_address + "mac:" + client.mac)
         clients_data_mutex
-        alive_rej_package = construct_alive_rej_package("User not allowed")
-        send_package_via_udp_to_client(alive_rej_package,client.udp_port,client.ip_address)
+        alive_rej =  struct.pack('B7s13s7s50s', ALIVE_REJ, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str("User not allowed"), 'utf-8'))
+
+        send_package_via_udp_to_client(alive_rej,client.udp_port,client.ip_address)
         return
     elif not are_random_num_and_ip_address_valid(client.id_equip,client.num_ale,client.ip_address):
         if debug_mode:
             print("Wrong num_ale in the ALIVE_INF package")
         clients_data_mutex.release()
-        alive_nack_package = construct_alive_nack_package("Wrong data recieved, wrong number")
-        send_package_via_udp_to_client(alive_nack_package,client.udp_port,client.ip_address)
+        alive_nack =  struct.pack('B7s13s7s50s', ALIVE_NACK, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(""), 'utf-8'), bytes(str("wrong data recieved. Wrong number"), 'utf-8'))
+        send_package_via_udp_to_client(alive_nack,client.udp_port,client.ip_address)
         return
     else:
         change_client_state(client.id_equip, ALIVE)
         clients_data_mutex.release()
-        alive_ack_package = construct_alive_ack_package(client.num_ale)
-        send_package_via_udp_to_client(alive_ack_package,client.udp_port,client.ip_address)
+        alive_ack =  struct.pack('B7s13s7s50s', ALIVE_ACK, bytes(str(servidor.id), 'utf-8'),bytes(str(servidor.mac),'utf-8'), bytes(str(client.num_ale), 'utf-8'), bytes(str(""), 'utf-8'))
+
+        send_package_via_udp_to_client(alive_ack,client.udp_port,client.ip_address)
 
 def manage_udp_conection(client, package_type, dades):
     if package_type == REG_REQ:
@@ -609,8 +556,8 @@ def write_file(connection,client_id_equip):
    
 def process_send_file_pack(received_package, connection,client_address):
     client = get_client_from_list(received_package[1].split(b"\x00")[0].decode("utf-8"))
-    pack = construct_send_ack_package(client.id_equip,client.num_ale)
-    send_package_via_tcp_to_client(pack,connection)
+    send_ack = struct.pack('B7s13s7s150s',SEND_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(client.num_ale),'utf-8'),bytes(str(client.id_equip),'utf-8') + bytes(str(".cfg"),'utf-8'))
+    send_package_via_tcp_to_client(send_ack,connection)
     write_file(connection,client.id_equip)
 
 def send_config_file(connection,client_id_equip):#revisar, id_equip s'empegue a la linea enviada
@@ -619,18 +566,18 @@ def send_config_file(connection,client_id_equip):#revisar, id_equip s'empegue a 
     except IOError:
         if debug_mode:
             print("DEBUG-> Rejected GET_FILE petitio." + client_id_equip + ".cfg can't be accessed or does not exist")
-        get_rej = construct_get_rej_package("file can't be accessed")
+        get_rej = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str("file can't be accessed"),'utf-8'))
         send_package_via_tcp_to_client(get_rej,connection)
         connection.close()
         config_file.close()
 
     client = get_client_from_list(client_id_equip)
     for line in config_file:
-        pack = construct_get_data_package(client_id_equip,client.num_ale,line)
-        send_package_via_tcp_to_client(pack,connection)
+        send_ack = struct.pack('B7s13s7s150s',GET_DATA, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(client.num_ale),'utf-8'), bytes(str(line),'utf-8'))
+        send_package_via_tcp_to_client(send_ack,connection)
         time.sleep(.005)
 
-    pack = construct_get_end_package(client_id_equip,client.num_ale)
+    pack = struct.pack('B7s13s7s150s',GET_END, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(client.num_ale),'utf-8'),bytes(str(client_id_equip),'utf-8') + bytes(str(""),'utf-8'))
     send_package_via_tcp_to_client(pack,connection) 
     config_file.close()
     connection.close()
@@ -643,16 +590,17 @@ def process_get_file_pack(received_package,connection,client_address):
     if not are_name_and_mac_valid(client.id_equip,client.mac):
         if debug_mode:
             print("DEBUG -> Rejected petition of getting file.Invalid user")
-        get_rej = construct_get_rej_package("Invalid user")
+        get_rej = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str("invalid user"),'utf-8'))
         send_package_via_tcp_to_client(get_rej,connection)
         connection.close()
     elif not are_random_num_and_ip_address_valid(client.id_equip,client.num_ale,client_address):
-        get_nack = construct_get_nack_package("wrong data received")
+        get_nack = struct.pack('B7s13s7s150s',GET_REJ, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str("000000"),'utf-8'),bytes(str(""),'utf-8') + bytes(str("wrong data recieved"),'utf-8'))
         send_package_via_tcp_to_client(get_nack,connection)
         connection.close()
     
-    pack = construct_get_ack_package(client.id_equip,client.num_ale)
-    send_package_via_tcp_to_client(pack,connection)
+    send_ack = struct.pack('B7s13s7s150s',GET_ACK, bytes(str(servidor.id),'utf-8'), bytes(str(servidor.mac),'utf-8'), bytes(str(client.num_ale),'utf-8'),bytes(str(client.id_equip),'utf-8') + bytes(str(client.id_equip+".cfg"),'utf-8'))
+
+    send_package_via_tcp_to_client(send_ack,connection)
     send_config_file(connection,client.id_equip)
 
 def manage_tcp_connection(received_package_unpacked,connection, client_address):
